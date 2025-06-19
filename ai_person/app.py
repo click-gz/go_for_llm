@@ -20,11 +20,11 @@ if not QIANFAN_AK or not QIANFAN_SK:
     print("警告: 未设置百度千帆API的AK和SK环境变量，将使用模拟回复")
 
 # 初始化千帆大模型客户端
-def create_qianfan_client() -> OpenAI:
+def create_qianfan_client(api_key: str):
     """创建千帆大模型客户端"""
     return OpenAI(
-        base_url="https://qianfan.baidubce.com/api/v2",
-        api_key=QIANFAN_AK,
+        base_url="https://qianfan.baidubce.com/v2",
+        api_key=api_key,
     )
 
 # 模拟流式回复生成器
@@ -75,6 +75,7 @@ async def handle_websocket(websocket):  # 移除 path 参数
                     
                 text = data.get("text", "")
                 model = data.get("model", "ERNIE-Bot")
+                api_key = data.get("api_key", QIANFAN_AK)
                 
                 if not text:
                     await websocket.send(json.dumps({
@@ -90,35 +91,45 @@ async def handle_websocket(websocket):  # 移除 path 参数
                 }))
                 
                 # 检查是否有API凭证
-                if QIANFAN_AK and QIANFAN_SK:
+                if api_key:
                     # 使用真实API
-                    client = create_qianfan_client()
-                    
+                    client = OpenAI(
+                        base_url="https://qianfan.baidubce.com/v2",
+                        api_key=api_key,
+                    )
                     # 准备对话消息
-                    messages = [{"role": "user", "content": text}]
-                    
-                    # 调用API (实际应用中应使用流式API)
+                    messages = [{"role": "user", "content": f"{text}"}]
+                    # 调用API
                     try:
-                        response = client.chat.completions.create(
-                            model=model,
-                            messages=messages,
-                            temperature=0.7,
-                            stream=False  # 非流式请求，后续会模拟流式输出
-                        )
+                        payload = {
+                                    "messages": messages,
+                                    "model": model,
+                                    "temperature": 0.7,
+                                    "max_tokens": 4096,
+                                    "top_p": 1,
+                                    "stream": False,
+                                    "stop": None,
+                                }
+                        try:
+                            print(f"调用API: {payload}")
+                            response = client.chat.completions.create(**payload)
+                        except Exception as e:
+                            print(f"API调用异常: {e}")
                         
                         result = response.choices[0].message.content
                         
+                        print(f"API返回结果: {result}")
                         # 模拟流式输出
-                        words = result.split()
+                        words = result.split("。")
                         partial_text = ""
                         
                         for word in words:
-                            partial_text += word + " "
+                            partial_text += word + "。"
                             await websocket.send(json.dumps({
                                 "type": "stream",
                                 "text": partial_text
                             }))
-                            await asyncio.sleep(0.1)  # 控制输出速度
+                            await asyncio.sleep(1)  # 控制输出速度
                             
                         # 发送完整结果
                         await websocket.send(json.dumps({
@@ -185,5 +196,6 @@ async def main() -> None:
         await asyncio.Future()  # 保持服务器运行
 
 if __name__ == "__main__":
+    
     # 启动异步事件循环
     asyncio.run(main())

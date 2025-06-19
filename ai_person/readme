@@ -1,0 +1,82 @@
+# AI语音对话助手
+
+一个基于Web的实时语音对话助手，支持语音识别和语音合成，使用百度千帆大语言模型进行对话生成。
+
+## 功能特点
+
+- 实时语音识别
+- 实时语音合成（文字转语音）
+- 流式对话响应
+- WebSocket实时通信
+- 支持百度千帆大语言模型
+- 响应式界面设计
+- 深色/浅色主题切换
+- 可配置的语音输入/输出设置
+
+## 技术栈
+
+- 前端：HTML5, TailwindCSS, JavaScript
+- 后端：Python, WebSocket
+- API：百度千帆大语言模型
+- 语音：Web Speech API
+
+## 快速开始
+
+1. 克隆仓库
+```bash
+git clone [repository-url]
+cd ai_person
+```
+
+2. 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+3. 配置环境变量
+创建 `.env` 文件并添加以下配置：
+```
+QIANFAN_AK=your_api_key
+QIANFAN_SK=your_secret_key
+SERVER_HOST=localhost
+SERVER_PORT=5000
+```
+
+4. 启动后端服务
+```bash
+python app.py
+```
+
+5. 打开前端页面
+在浏览器中打开 `real_time.html` 文件
+
+## 使用说明
+
+1. 点击麦克风按钮开始录音
+2. 说话时请保持适中语速和音量
+3. 再次点击麦克风按钮停止录音
+4. 等待AI助手回复
+5. 可以在设置中配置语音相关选项
+
+## 配置选项
+
+- API设置：配置百度千帆API密钥
+- WebSocket设置：配置服务器连接地址
+- 语音设置：
+  - ASR引擎选择
+  - TTS声音选择
+  - 自动播放设置
+
+## 注意事项
+
+- 需要使用支持Web Speech API的现代浏览器（推荐Chrome/Edge）
+- 首次使用需要允许浏览器访问麦克风
+- 实际使用时需配置有效的百度千帆API密钥
+
+## 贡献
+
+欢迎提交Issue和Pull Request！
+
+## 许可证
+
+[MIT License](LICENSE)

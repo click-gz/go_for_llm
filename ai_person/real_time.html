@@ -178,8 +178,8 @@
         
         <div class="mb-4">
           <label class="flex items-center">
-            <input type="checkbox" id="auto-play" class="mr-2" disabled checked>
-            <span>自动播放回复语音(已禁用)</span>
+            <input type="checkbox" id="auto-play" class="mr-2">
+            <span>自动播放回复语音</span>
           </label>
         </div>
       </div>
@@ -204,6 +204,7 @@
         currentStream: {
             active: false,
             content: '',
+
             element: null,
             messageId: null
         },
@@ -273,13 +274,14 @@
             wsUrlInput.value = settings.wsUrl || 'ws://localhost:5000';
             asrEngineSelect.value = settings.asrEngine || 'mock';
             ttsVoiceSelect.value = settings.ttsVoice || 'female';
-            autoPlayCheckbox.checked = settings.autoPlay !== undefined ? settings.autoPlay : false;
-            isAudioOutputEnabled = settings.audioOutput !== undefined ? settings.audioOutput : false;
+            autoPlayCheckbox.checked = settings.autoPlay !== undefined ? settings.autoPlay : true;
+            isAudioOutputEnabled = settings.audioOutput !== undefined ? settings.audioOutput : true;
         } else {
             // 默认设置
             wsUrlInput.value = 'ws://localhost:5000';
             asrEngineSelect.value = 'mock';
-            autoPlayCheckbox.checked = false;
+            autoPlayCheckbox.checked = true;
+            isAudioOutputEnabled = true;
         }
         
         // 更新UI
@@ -305,21 +307,187 @@
     function updateAudioOutputButton() {
         if (isAudioOutputEnabled) {
             audioOutputToggle.innerHTML = '<i class="fa fa-volume-up mr-1"></i> 语音输出';
-            audioOutputToggle.classList.remove('bg-gray-300', 'disabled');
+            audioOutputToggle.classList.remove('bg-gray-300');
             audioOutputToggle.classList.add('bg-gray-100');
         } else {
-            audioOutputToggle.innerHTML = '<i class="fa fa-volume-off mr-1"></i> 语音输出(已禁用)';
+            audioOutputToggle.innerHTML = '<i class="fa fa-volume-off mr-1"></i> 语音输出';
             audioOutputToggle.classList.remove('bg-gray-100');
-            audioOutputToggle.classList.add('bg-gray-300', 'disabled');
+            audioOutputToggle.classList.add('bg-gray-300');
         }
     }
     
-    // 百度ASR语音识别 - 暂时使用模拟数据
-    function recognizeSpeech(audioBlob) {
-        // 返回一个随机的模拟识别结果
-        const randomIndex = Math.floor(Math.random() * mockRecognitionResults.length);
-        return Promise.resolve(mockRecognitionResults[randomIndex]);
+    let recognition;
+    function initRecognition() {
+        // 检查浏览器支持
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert('抱歉，您的浏览器不支持语音识别功能。请使用Chrome、Edge等现代浏览器。');
+            return false;
+        }
+        
+        // 创建识别对象
+        recognition = new window.webkitSpeechRecognition();
+        
+        // 配置识别参数
+        recognition.continuous = true;  // 连续识别
+        recognition.interimResults = true;  // 返回中间结果
+        recognition.lang = window.navigator.language;  // 设置语言为中文
+        console.log('语音识别已初始化 ', recognition.lang);
+        
+        // 设置回调函数
+        recognition.onstart = () => {
+            isRecognizing = true;
+            console.log('语音识别已开始。。。');
+            // updateStatus('识别中...', 'fa-microphone', 'text-primary');
+          
+        };
+        
+        recognition.onresult = (event) => {
+            const transcript = [];
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                transcript.push(event.results[i][0].transcript);
+                
+                // 如果是最终结果
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + ' ';
+                    addMessage(finalTranscript, true);
+                    // 通过WebSocket发送到后端
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        console.log('发送识别请求:', finalTranscript);
+                        ws.send(JSON.stringify({
+                            type: 'chat',
+                            text: finalTranscript,
+                            model: 'ernie-4.5-turbo-32k',
+                            api_key: apiKeyInput.value,
+                        }));
+                        
+                        // 添加等待消息
+                        addMessage('', false, true);
+                        statusText.textContent = '正在发送请求...';
+                    } else {
+                        showError('WebSocket连接未建立');
+                    }
+                }
+            }
+            
+            // 更新识别结果
+            const interimTranscript = transcript.join('');
+            
+        };
+        
+        recognition.onerror = (event) => {
+            console.error('语音识别错误:', event.error);
+            // updateStatus(`错误: ${event.error}`, 'fa-exclamation-triangle', 'text-red-500');
+        };
+        
+        recognition.onend = () => {
+            isRecognizing = false;
+            // updateStatus('已停止', 'fa-microphone-slash', 'text-gray-500');
+        };
+        
+        return true;
     }
+
+    // 语音识别
+    function recognizeSpeech() {
+        if (!recognition) {
+            if (!initRecognition()) return;
+        }
+        isRecording = true;
+        recordBtn.innerHTML = '<i class="fa fa-stop text-3xl"></i>';
+        recordBtn.classList.remove('bg-primary');
+        recordBtn.classList.add('bg-red-500');
+        statusIcon.className = 'w-3 h-3 rounded-full bg-green-500 mr-3 animate-pulse';
+        statusText.textContent = '正在录音，请说话...';
+        
+        finalTranscript = '';
+        recognition.start();
+        
+    }
+    // 停止识别
+    function stopRecognition() {
+        if (recognition && isRecognizing) {
+            recognition.stop();
+            if (!isRecording) return;
+        
+            isRecording = false;
+            
+            // 重置录音按钮
+            recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
+            recordBtn.classList.remove('bg-red-500');
+            recordBtn.classList.add('bg-primary');
+            console.log('语音识别已停止');
+        }
+    }
+
+    // 文本转语音
+    // 使用浏览器的SpeechSynthesis API进行语音合成
+    // 添加语音队列管理
+    let speechQueue = [];
+    let isSpeaking = false;
+
+    function speakText(text) {
+        // 检查是否启用了语音输出
+        if (!isAudioOutputEnabled || !('speechSynthesis' in window)) {
+            console.log('语音输出已禁用或不支持');
+            return;
+        }
+
+
+        if (!('speechSynthesis' in window)) {
+            console.error('你的浏览器不支持语音合成API');
+            return;
+        }
+      
+        // 创建语音合成话语
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // 设置语音属性
+        utterance.lang = 'zh-CN';
+        utterance.pitch = 1;
+        utterance.rate = 1;
+        utterance.volume = 1;
+
+        // 添加结束事件处理器
+        utterance.onend = () => {
+            isSpeaking = false;
+            processQueue(); // 处理队列中的下一条语音
+        };
+
+        // 添加错误事件处理器
+        utterance.onerror = (error) => {
+            console.error('语音合成错误:', error);
+            isSpeaking = false;
+            processQueue(); // 出错时也继续处理队列
+        };
+
+        // 将语音添加到队列
+        speechQueue.push(utterance);
+        
+        // 如果当前没有播放，则开始处理队列
+        if (!isSpeaking) {
+            processQueue();
+        }
+    }
+
+    // 处理语音队列
+    function processQueue() {
+        if (speechQueue.length === 0 || isSpeaking) return;
+
+        isSpeaking = true;
+        const utterance = speechQueue.shift();
+        window.speechSynthesis.speak(utterance);
+    }
+
+    // 清空语音队列
+    function clearSpeechQueue() {
+        speechQueue = [];
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+        }
+        isSpeaking = false;
+    }
+
+
     
     // 百度TTS语音合成 - 暂时不使用
     async function synthesizeSpeech(text) {
@@ -468,6 +636,16 @@
                 messageId: generateMessageId()
             };
         } else {
+            // 找出新增的文本
+            if (isAudioOutputEnabled) {
+                const currentLength = chatState.currentStream.content.length;
+                if (text.length > currentLength) {
+                    const newText = text.substring(currentLength);
+                    if (newText) {
+                        speakText(newText);
+                    }
+                }
+            }
             chatState.currentStream.content = text; // 直接覆盖
         }
 
@@ -479,15 +657,21 @@
     }
     // 处理流式消息结束
     function handleStreamEnd() {
-      if (chatState.currentStream.active && chatState.currentStream.element) {
-        finishStreamingMessage(chatState.currentStream.element);
-        chatState.currentStream = {
-          active: false,
-          content: '',
-          element: null
-        };
-        statusText.textContent = '回复已完成';
-      }
+        if (chatState.currentStream.active && chatState.currentStream.element) {
+            finishStreamingMessage(chatState.currentStream.element);
+            
+            // // 播放完整的回复内容
+            // if (chatState.currentStream.content) {
+            //     speakText(chatState.currentStream.content);
+            // }
+            
+            chatState.currentStream = {
+                active: false,
+                content: '',
+                element: null
+            };
+            statusText.textContent = '回复已完成';
+        }
     }
     
     // 处理完整响应
@@ -595,104 +779,6 @@
         }
     }
     
-    // 开始录音
-    async function startRecording() {
-        if (isRecording) return;
-        
-        try {
-            // 检查WebSocket连接
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                connectWebSocket();
-                // 等待连接建立
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    throw new Error('WebSocket连接未建立');
-                }
-            }
-            
-            // 重置访问令牌
-            accessToken = null;
-            
-            // 获取麦克风权限（保留代码结构，但实际不使用）
-            mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            
-            // 创建音频上下文（保留代码结构，但实际不使用）
-            if (!audioContext || audioContext.state === 'closed') {
-                audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            
-            // 创建音频分析器（保留代码结构，但实际不使用）
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            const bufferLength = analyser.frequencyBinCount;
-            dataArray = new Uint8Array(bufferLength);
-            
-            // 开始录制
-            isRecording = true;
-            recordBtn.innerHTML = '<i class="fa fa-stop text-3xl"></i>';
-            recordBtn.classList.remove('bg-primary');
-            recordBtn.classList.add('bg-red-500');
-            statusIcon.className = 'w-3 h-3 rounded-full bg-green-500 mr-3 animate-pulse';
-            statusText.textContent = '正在录音，请说话...';
-            
-            // 模拟录音5秒后自动停止（替代实际录音功能）
-            setTimeout(async () => {
-                if (isRecording) {
-                    await stopRecording();
-                    
-                    // 模拟识别语音
-                    try {
-                        const recognizedText = await recognizeSpeech(null);
-                        if (recognizedText) {
-                            // 添加用户消息到对话
-                            addMessage(recognizedText, true);
-                            console.log('用户输入:', recognizedText);
-                            
-                            // 通过WebSocket发送到后端
-                            if (ws && ws.readyState === WebSocket.OPEN) {
-                                ws.send(JSON.stringify({
-                                    type: 'chat',
-                                    text: recognizedText,
-                                    model: 'ernie-bot'
-                                }));
-                                
-                                // 添加等待消息
-                                addMessage('', false, true);
-                                statusText.textContent = '正在发送请求...';
-                            } else {
-                                showError('WebSocket连接未建立');
-                            }
-                        }
-                    } catch (error) {
-                        showError(`处理语音错误: ${error.message}`);
-                    }
-                }
-            }, 5000);
-            
-        } catch (error) {
-            showError(`录音错误: ${error.message}`);
-        }
-    }
-    
-    // 停止录音
-    function stopRecording() {
-        if (!isRecording) return;
-        
-        isRecording = false;
-        cancelAnimationFrame(animationFrameId);
-        
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(track => track.stop());
-            mediaStream = null;
-        }
-        
-        // 重置录音按钮
-        recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
-        recordBtn.classList.remove('bg-red-500');
-        recordBtn.classList.add('bg-primary');
-    }
-    
     // 清空对话
     function clearChat() {
         chatContainer.innerHTML = `
@@ -716,6 +802,7 @@
             },
             messages: []
         };
+        clearSpeechQueue();
     }
     
     // 切换主题
@@ -735,9 +822,23 @@
     }
     
     // 切换语音输出 - 暂时禁用
+    // 修改音频输出按钮事件监听
+    audioOutputToggle.addEventListener('click', toggleAudioOutput);
+
+    // 移除按钮的disabled属性
+    audioOutputToggle.removeAttribute('disabled');
+
     function toggleAudioOutput() {
-        // 保持禁用状态
-        return;
+        isAudioOutputEnabled = !isAudioOutputEnabled;
+        updateAudioOutputButton();
+        
+        // 如果禁用，清空当前语音队列
+        if (!isAudioOutputEnabled) {
+            clearSpeechQueue();
+        }
+        
+        // 保存设置
+        saveAppSettings();
     }
     
     // 事件监听器
@@ -745,9 +846,9 @@
         // 录音按钮
         recordBtn.addEventListener('click', () => {
             if (isRecording) {
-                stopRecording();
+                stopRecognition();
             } else {
-                startRecording();
+                recognizeSpeech();
             }
         });
         
@@ -808,6 +909,7 @@
         initSettings();
         setupEventListeners();
         connectWebSocket();
+        // speakText('欢迎使用百度AI语音对话助手！请点击下方麦克风按钮开始对话。');
     }
     
     // 页面加载完成后初始化应用
