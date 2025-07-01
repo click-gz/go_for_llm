@@ -1,0 +1,3 @@
+[submodule "gemini_websearch"]
+	path = gemini_websearch
+	url = https://github.com/google-gemini/gemini-fullstack-langgraph-quickstart.git
