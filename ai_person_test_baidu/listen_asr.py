@@ -72,7 +72,8 @@ class RealtimeASR:
         try:
             while self.is_running:
                 data = self.stream.read(CHUNK, exception_on_overflow=False)
-                ws.send(data, websocket.ABNF.OPCODE_BINARY)
+                # print("data: ", data)
+                # ws.send(data, websocket.ABNF.OPCODE_BINARY)
         except Exception as e:
             logger.error(f"音频发送错误: {str(e)}")
         finally:
@@ -102,14 +103,14 @@ class RealtimeASR:
         except Exception as e:
             logger.error(f"结果解析错误: {str(e)}")
 
-    def on_error(self, ws, error):
+    def on_error(self, ws, error, b=None):
         """错误回调"""
-        logger.error(f"发生错误: {str(error)}")
+        logger.error(f"发生错误: {str(error)}, {b}")
         self.is_running = False
 
-    def on_close(self, ws):
+    def on_close(self, ws, a=None, c=None):
         """关闭回调"""
-        logger.info("连接关闭")
+        logger.info(f"连接关闭, {a}  {c}")
         self.is_running = False
 
     def run(self):

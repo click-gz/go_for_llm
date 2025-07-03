@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时音频录制</title>
+    <title>语音转文本</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script>
@@ -11,10 +11,13 @@
             theme: {
                 extend: {
                     colors: {
-                        primary: '#3B82F6',
+                        primary: '#165DFF',
+                        secondary: '#0FC6C2',
+                        neutral: '#F5F7FA',
+                        dark: '#1D2129',
                     },
                     fontFamily: {
-                        inter: ['Inter', 'system-ui', 'sans-serif'],
+                        inter: ['Inter', 'sans-serif'],
                     },
                 }
             }
@@ -42,63 +45,106 @@
                     opacity: 0.5;
                 }
             }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+
+            .message-item {
+                margin-bottom: 20px;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4 font-inter">
-    <div class="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
-        <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">实时音频录制</h1>
-        
-        <div class="flex flex-col items-center space-y-6">
-            <button id="recordBtn" class="bg-primary hover:bg-primary/90 text-white font-bold py-4 px-8 rounded-full transition-all duration-300 transform hover:scale-105 active:scale-95 btn-shadow flex items-center justify-center">
-                <i class="fa fa-microphone text-3xl"></i>
-            </button>
-            
-            <div id="connectionStatus" class="flex items-center">
-                <span id="statusDot" class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-2"></span>
-                <span id="statusText" class="text-gray-600 text-lg font-medium">未连接到服务器</span>
-            </div>
-            
-            <div id="audioInfo" class="hidden w-full bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <p class="text-blue-700 font-medium mb-2">音频信息</p>
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div class="text-gray-600">采样率:</div>
-                    <div id="sampleRate" class="text-gray-800 font-medium">16000 Hz</div>
-                    <div class="text-gray-600">声道数:</div>
-                    <div id="channels" class="text-gray-800 font-medium">单声道</div>
-                    <div class="text-gray-600">位深度:</div>
-                    <div id="bitDepth" class="text-gray-800 font-medium">16位</div>
-                    <div class="text-gray-600">已发送:</div>
-                    <div id="dataSent" class="text-gray-800 font-medium">0 KB</div>
-                </div>
-            </div>
-            
-            <div id="errorContainer" class="hidden mt-4 p-3 bg-red-100 text-red-700 rounded-lg w-full text-center">
-                <i class="fa fa-exclamation-circle mr-2"></i>
-                <span id="errorText">错误信息将显示在这里</span>
+<body class="font-inter bg-gray-50 min-h-screen flex flex-col">
+    <!-- 顶部导航 -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-microphone text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-dark">语音转文本</h1>
             </div>
         </div>
-    </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-6">
+        <!-- 状态显示区 -->
+        <div class="mb-6 bg-white rounded-lg shadow-sm p-4 flex items-center">
+            <div id="statusDot" class="w-3 h-3 rounded-full bg-gray-300 mr-3"></div>
+            <p id="statusText" class="text-gray-600">准备就绪，请点击下方按钮开始录音</p>
+        </div>
+
+        <!-- 文本显示区 -->
+        <div id="chat-container" class="bg-white rounded-lg shadow-sm p-4 mb-6 h-[500px] overflow-y-auto scrollbar-hide">
+            <div class="flex flex-col space-y-6" style="margin-bottom: 20px;">
+                <div class="flex items-start">
+                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0">
+                        <i class="fa fa-info-circle"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none max-w-[80%]">
+                        <p class="text-gray-800">欢迎使用语音转文本功能！点击下方麦克风按钮开始录音，您的语音将被转换为文字显示在这里。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 语音输入区域 -->
+        <div class="bg-white rounded-lg shadow-sm p-4 flex flex-col space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div id="voice-level" class="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div id="voice-level-indicator" class="h-full bg-primary w-0 transition-all duration-150"></div>
+                    </div>
+                    <span id="voice-level-text" class="text-sm text-gray-500">音量: 0</span>
+                </div>
+                <button id="clear-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fa fa-trash-o mr-1"></i> 清空文本
+                </button>
+            </div>
+            
+            <div class="flex justify-center">
+                <button id="recordBtn" class="w-20 h-20 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:bg-primary/90 active:scale-95 transition-all">
+                    <i class="fa fa-microphone text-3xl"></i>
+                </button>
+            </div>
+            
+            <div class="text-center text-sm text-gray-500">
+                <p>说话时请保持适中语速和音量</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-gray-200 py-4">
+        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>© 2025 语音转文本 | WebSocket连接至 ws://localhost:8080</p>
+        </div>
+    </footer>
 
     <script>
         let mediaRecorder;
         let audioStream;
         let isRecording = false;
         let ws;
-        let dataSent = 0;
+        let audioContext;
+        let analyser;
+        let animationFrameId;
         const recordBtn = document.getElementById('recordBtn');
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
-        const errorContainer = document.getElementById('errorContainer');
-        const errorText = document.getElementById('errorText');
-        const audioInfo = document.getElementById('audioInfo');
-        const dataSentElement = document.getElementById('dataSent');
+        const chatContainer = document.getElementById('chat-container');
+        const clearBtn = document.getElementById('clear-btn');
+        const voiceLevelIndicator = document.getElementById('voice-level-indicator');
+        const voiceLevelText = document.getElementById('voice-level-text');
 
         // 初始化WebSocket连接
         function initWebSocket() {
             try {
-                // 连接到后端WebSocket服务器
-                ws = new WebSocket('ws://localhost:8765');
+                ws = new WebSocket('ws://localhost:8080');
                 
                 ws.onopen = () => {
                     console.log('WebSocket连接已建立');
@@ -111,7 +157,6 @@
                     
                     if (isRecording) {
                         stopRealTimeAudio();
-                        showError('WebSocket连接断开');
                     }
                     
                     // 尝试重新连接
@@ -119,130 +164,281 @@
                 };
 
                 ws.onmessage = (event) => {
-                    console.log('收到服务器消息:', event.data);
+                    try {
+                        const data = JSON.parse(event.data);
+                        console.log('收到消息:', data);
+                        if(data.role === "user" && data.content?.result) {
+                            // 判断是否是增量结果
+                            const isIncremental = data.content?.is_incremental || false;
+                            updateMessage(data.content.result, true, isIncremental);
+                        }
+                        else if(data.role === "assistant" && data.content) {
+                            updateMessage(data.content, false);
+                        }
+                    } catch (e) {
+                        console.log('收到非JSON消息:', event.data);
+                    }
                 };
+
                 
                 ws.onerror = (error) => {
                     console.error('WebSocket错误:', error);
                     updateConnectionStatus(false);
-                    showError('WebSocket连接失败');
                 };
             } catch (error) {
                 console.error('WebSocket初始化失败:', error);
                 updateConnectionStatus(false);
-                showError('无法建立WebSocket连接');
             }
         }
 
         // 更新连接状态UI
         function updateConnectionStatus(isConnected) {
             if (isConnected) {
-                statusDot.classList.replace('bg-gray-400', 'bg-green-500');
+                statusDot.classList.replace('bg-gray-300', 'bg-green-500');
                 statusText.textContent = '已连接到服务器';
-                statusText.classList.replace('text-gray-600', 'text-green-600');
             } else {
-                statusDot.classList.replace('bg-green-500', 'bg-gray-400');
+                statusDot.classList.replace('bg-green-500', 'bg-gray-300');
                 statusText.textContent = '未连接到服务器';
-                statusText.classList.replace('text-green-600', 'text-gray-600');
             }
+        }
+
+        // 在script标签中添加这些变量
+        let currentMessageId = null;
+        let currentMessageElement = null;
+
+        // 更新消息显示函数
+        function updateMessage(text, isUser = false, isIncremental = false) {
+            // 如果是增量更新且当前有活跃消息
+            if (isIncremental && currentMessageElement) {
+                currentMessageElement.querySelector('p').textContent = text;
+            } 
+            // 否则创建新消息
+            else {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `flex items-start ${isUser ? 'justify-end' : ''} mb-4`;
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = isUser ? 
+                    'bg-secondary/10 text-gray-800 rounded-lg p-3 rounded-tr-none max-w-[80%]' :
+                    'bg-gray-100 text-gray-800 rounded-lg p-3 rounded-tl-none max-w-[80%]';
+                
+                const textP = document.createElement('p');
+                textP.textContent = text;
+                contentDiv.appendChild(textP);
+                messageDiv.appendChild(contentDiv);
+                
+                chatContainer.appendChild(messageDiv);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                
+                // 如果是用户消息，保存引用用于增量更新
+                if (isUser) {
+                    currentMessageElement = contentDiv;
+                }
+            }
+        }
+
+
+        // 添加消息到对话区
+        function addMessage(text, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start ' + (isUser ? 'justify-end' : '');
+            
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = isUser ? 
+                'w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary mr-3 flex-shrink-0' :
+                'w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0';
+            
+            const icon = isUser ? '<i class="fa fa-user"></i>' : '<i class="fa fa-comment"></i>';
+            avatarDiv.innerHTML = icon;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = isUser ? 
+                'bg-secondary/10 text-gray-800 rounded-lg p-3 rounded-tr-none max-w-[80%]' :
+                'bg-gray-100 text-gray-800 rounded-lg p-3 rounded-tl-none max-w-[80%]';
+            
+            const textP = document.createElement('p');
+            textP.textContent = text;
+            contentDiv.appendChild(textP);
+            
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 清空对话区
+        function clearChat() {
+            chatContainer.innerHTML = `
+                <div class="flex items-start message-item">
+                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0">
+                        <i class="fa fa-info-circle"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none max-w-[80%]">
+                        <p class="text-gray-800">欢迎使用语音转文本功能！点击下方麦克风按钮开始录音，您的语音将被转换为文字显示在这里。</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 更新语音音量指示器
+        function updateVoiceLevel(level) {
+            const percentage = Math.min(100, Math.max(0, level * 100));
+            voiceLevelIndicator.style.width = `${percentage}%`;
+            voiceLevelText.textContent = `音量: ${Math.round(percentage)}`;
+        }
+
+        let noiseLevel = 0;
+        let isCalibrating = false;
+        const CALIBRATION_TIME = 1000; // 1秒噪声校准时间
+        const SILENCE_TIMEOUT = 2000; // 1秒无语音自动停止
+        let lastVoiceTime = 0; // 必须初始化
+
+        // 分析音频数据
+        let isSilent = false;
+
+        function analyzeAudio() {
+            if (!analyser || !isRecording) return;
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            
+            // 计算当前音量级别
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i] * dataArray[i];
+            }
+            const rms = Math.sqrt(sum / dataArray.length);
+            const level = rms / 255;
+            
+            updateVoiceLevel(level);
+            
+            // 静音检测
+            const currentTime = Date.now();
+            if (level > 0.1) { // 有声音
+                lastVoiceTime = currentTime;
+                
+                // 如果之前是静音状态，现在检测到声音，发送"say"消息
+                if (isSilent && ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({
+                        "status": "say"
+                    }));
+                    isSilent = false;
+                    statusText.textContent = '正在录音，请说话...';
+                }
+            } else if (currentTime - lastVoiceTime > SILENCE_TIMEOUT) { // 静音超时
+                // 只发送停止消息，不关闭麦克风
+                if (ws && ws.readyState === WebSocket.OPEN && !isSilent) {
+                    ws.send(JSON.stringify({
+                        "status": "over"
+                    }));
+                    isSilent = true;
+                    statusText.textContent = '检测到静音，等待语音...';
+                }
+            }
+            
+            animationFrameId = requestAnimationFrame(analyzeAudio);
         }
 
         // 启动录音并实时传输
         async function startRealTimeAudio() {
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                showError('未连接到服务器');
                 return;
             }
 
+            ws.send(JSON.stringify({
+                "status": "say"
+            }));
+            
             try {
-                // 获取麦克风权限
-                audioStream = await navigator.mediaDevices.getUserMedia({ 
-                    audio: {
-                        sampleRate: 16000,  // 匹配后端采样率
-                        channelCount: 1     // 单声道
-                    }
-                });
-                
-                // 创建MediaRecorder实例
-                mediaRecorder = new MediaRecorder(audioStream, {
-                    mimeType: 'audio/webm;codecs=opus',
-                    audioBitsPerSecond: 16000
-                });
-                
-                dataSent = 0;
-                dataSentElement.textContent = '0 KB';
-                audioInfo.classList.remove('hidden');
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                        sampleRate: 16000
+                    });
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1
+                        }
+                    });
+                    
+                    const source = audioContext.createMediaStreamSource(stream);
+                    analyser = audioContext.createAnalyser();
+                    analyser.fftSize = 64;
+                    analyser.smoothingTimeConstant = 0.3;
+                    
+                    const samplesPer160ms = 2048;
+                    const processor = audioContext.createScriptProcessor(samplesPer160ms, 1, 1);
 
-                // 数据可用时发送到后端
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0 && ws.readyState === WebSocket.OPEN) {
-                        dataSent += event.data.size;
-                        dataSentElement.textContent = `${(dataSent / 1024).toFixed(2)} KB`;
-                        
-                        // 发送音频数据到后端
-                        ws.send(event.data);
-                    }
-                };
-
-                // 录音停止时
-                mediaRecorder.onstop = () => {
-                    console.log('录音已停止');
-                    // 可以在这里添加录音停止后的处理逻辑
-                };
-
-                // 开始录音，每200ms获取一次音频数据
-                mediaRecorder.start(200);
+                    processor.onaudioprocess = (e) => {
+                        // 只有在录音状态下才发送音频数据
+                        if (ws.readyState === WebSocket.OPEN && isRecording) {
+                            const pcmData = e.inputBuffer.getChannelData(0);
+                            const pcm16 = new Int16Array(pcmData.length);
+                            for (let i = 0; i < pcmData.length; i++) {
+                                pcm16[i] = Math.max(-32768, Math.min(32767, pcmData[i] * 32768));
+                            }
+                            ws.send(pcm16.buffer);
+                        }
+                    };
+                    
+                    source.connect(analyser);
+                    source.connect(processor);
+                    processor.connect(audioContext.destination);
+                    
+                    audioStream = {
+                        audioContext,
+                        stream,
+                        processor,
+                        source
+                    };
+                }
                 
-                // 更新UI状态
                 isRecording = true;
+                lastVoiceTime = Date.now();
                 recordBtn.innerHTML = '<i class="fa fa-stop text-3xl"></i>';
                 recordBtn.classList.replace('bg-primary', 'bg-red-500');
-                recordBtn.classList.replace('btn-shadow', 'btn-shadow-red');
-                recordBtn.classList.add('pulse-animation');
                 statusText.textContent = '正在录音，请说话...';
-                statusText.classList.add('text-green-600');
+                
+                analyzeAudio();
+
+                currentMessageId = Date.now();
+                currentMessageElement = null;
                 
             } catch (error) {
                 console.error('录音启动失败:', error);
-                showError('无法访问麦克风');
+                statusText.textContent = '无法访问麦克风';
             }
         }
 
         // 停止录音
-        function stopRealTimeAudio() {
-            if (mediaRecorder && isRecording) {
-                // 停止录音
-                mediaRecorder.stop();
-                if (audioStream) {
-                    audioStream.getTracks().forEach(track => track.stop());
-                }
-                
-                // 更新UI状态
-                isRecording = false;
-                recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
-                recordBtn.classList.replace('bg-red-500', 'bg-primary');
-                recordBtn.classList.replace('btn-shadow-red', 'btn-shadow');
-                recordBtn.classList.remove('pulse-animation');
-                statusText.textContent = '录音已停止';
-                statusText.classList.remove('text-green-600');
-                audioInfo.classList.add('hidden');
+        function stopRealTimeAudio(sendStopMessage = true) {
+            if (sendStopMessage && ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    "status": "over"
+                }));
             }
-        }
-
-        // 显示错误信息
-        function showError(message) {
-            errorText.textContent = message;
-            errorContainer.classList.remove('hidden');
-            errorContainer.classList.add('flex', 'items-center', 'justify-center');
             
-            // 5秒后自动隐藏错误信息
-            setTimeout(() => {
-                errorContainer.classList.add('hidden');
-                errorContainer.classList.remove('flex', 'items-center', 'justify-center');
-            }, 5000);
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            isRecording = false;
+            recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
+            recordBtn.classList.replace('bg-red-500', 'bg-primary');
+            statusText.textContent = '已连接到服务器';
+            
+            // 重置音量指示器
+            voiceLevelIndicator.style.width = '0%';
+            voiceLevelText.textContent = '音量: 0';
+
+            currentMessageId = null;
+            currentMessageElement = null;
         }
 
-        // 录音按钮点击事件
+        // 事件监听器
         recordBtn.addEventListener('click', (e) => {
             e.preventDefault();
             if (isRecording) {
@@ -251,6 +447,8 @@
                 startRealTimeAudio();
             }
         });
+
+        clearBtn.addEventListener('click', clearChat);
 
         // 页面卸载时清理资源
         window.addEventListener('beforeunload', () => {
@@ -266,4 +464,4 @@
         window.addEventListener('load', initWebSocket);
     </script>
 </body>
-</html>    
+</html>
