@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音合成播放器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+    <div class="container mx-auto px-4 py-8 max-w-md">
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h1 class="text-2xl font-bold text-center mb-6">语音合成播放器</h1>
+            
+            <div class="mb-6">
+                <textarea id="text-input" class="w-full h-32 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary" placeholder="请输入要转换的文本..."></textarea>
+            </div>
+            
+            <div class="flex gap-3 mb-6">
+                <button id="synthesize-btn" class="flex-1 bg-primary text-white py-3 px-4 rounded-lg hover:bg-primary/90 transition-colors">
+                    <i class="fa fa-volume-up mr-2"></i>合成并播放
+                </button>
+                <button id="clear-btn" class="py-3 px-4 border border-gray-300 rounded-lg hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-eraser"></i>
+                </button>
+            </div>
+            
+            <div id="status" class="mb-4 p-3 rounded-lg hidden"></div>
+            
+            <div id="player-container" class="hidden">
+                <audio id="audio-player" controls class="w-full"></audio>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const textInput = document.getElementById('text-input');
+            const synthesizeBtn = document.getElementById('synthesize-btn');
+            const clearBtn = document.getElementById('clear-btn');
+            const status = document.getElementById('status');
+            const audioPlayer = document.getElementById('audio-player');
+            const playerContainer = document.getElementById('player-container');
+            
+            // 清空文本
+            clearBtn.addEventListener('click', () => {
+                textInput.value = '';
+            });
+            
+            // 合成并播放
+            synthesizeBtn.addEventListener('click', async () => {
+                const text = textInput.value.trim();
+                
+                if (!text) {
+                    showStatus('请输入要合成的文本', 'warning');
+                    return;
+                }
+                
+                showStatus('正在合成语音...', 'info');
+                playerContainer.classList.add('hidden');
+                
+                try {
+                    const response = await fetch('http://localhost:5000/synthesize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP错误，状态码：${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        showStatus(`合成失败: ${data.error}`, 'error');
+                        return;
+                    }
+                    
+                    if (!data.audio_url) {
+                        showStatus('合成失败: 服务器未返回有效的音频URL', 'error');
+                        return;
+                    }
+                    
+                    showStatus('合成成功，正在播放...', 'success');
+                    
+                    // 播放音频
+                    playerContainer.classList.remove('hidden');
+                    audioPlayer.src = data.audio_url;
+                    audioPlayer.play();
+                    
+                } catch (error) {
+                    showStatus(`请求失败: ${error.message}`, 'error');
+                }
+            });
+            
+            function showStatus(message, type) {
+                status.textContent = message;
+                status.className = 'mb-4 p-3 rounded-lg';
+                
+                if (type === 'info') {
+                    status.classList.add('bg-blue-50', 'text-blue-700', 'border-l-4', 'border-blue-400');
+                } else if (type === 'success') {
+                    status.classList.add('bg-green-50', 'text-green-700', 'border-l-4', 'border-green-400');
+                } else if (type === 'warning') {
+                    status.classList.add('bg-yellow-50', 'text-yellow-700', 'border-l-4', 'border-yellow-400');
+                } else if (type === 'error') {
+                    status.classList.add('bg-red-50', 'text-red-700', 'border-l-4', 'border-red-400');
+                }
+                
+                status.classList.remove('hidden');
+                
+                // 3秒后自动隐藏状态
+                setTimeout(() => {
+                    if (type !== 'error') { // 错误状态不自动隐藏
+                        status.classList.add('hidden');
+                    }
+                }, 3000);
+            }
+        });
+    </script>
+</body>
+</html>
+    
