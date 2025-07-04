@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>语音转文本</title>
+    <title>AI语音面试</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <script>
@@ -52,21 +52,9 @@
                 -ms-overflow-style: none;
                 scrollbar-width: none;
             }
+
             .message-item {
                 margin-bottom: 20px;
-            }
-            .audio-play-indicator {
-                position: relative;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 24px;
-                height: 24px;
-                border-radius: 50%;
-                background-color: rgba(22, 93, 255, 0.1);
-                color: #165DFF;
-                margin-left: 8px;
-                animation: pulse 1.5s infinite;
             }
         }
     </style>
@@ -77,7 +65,7 @@
         <div class="container mx-auto px-4 py-3 flex items-center justify-between">
             <div class="flex items-center space-x-2">
                 <i class="fa fa-microphone text-primary text-2xl"></i>
-                <h1 class="text-xl font-bold text-dark">语音转文本</h1>
+                <h1 class="text-xl font-bold text-dark">AI语音面试</h1>
             </div>
         </div>
     </header>
@@ -89,7 +77,15 @@
             <div id="statusDot" class="w-3 h-3 rounded-full bg-gray-300 mr-3"></div>
             <p id="statusText" class="text-gray-600">准备就绪，请点击下方按钮开始录音</p>
         </div>
-
+        <div class="mb-6 bg-white rounded-lg shadow-sm p-4">
+            <h2 class="text-lg font-semibold text-dark mb-3">个人信息</h2>
+            <textarea 
+                id="userInfo" 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                rows="3" 
+                placeholder="请输入您的个人信息（如姓名、职位、联系方式等）"
+            ></textarea>
+        </div>
         <!-- 文本显示区 -->
         <div id="chat-container" class="bg-white rounded-lg shadow-sm p-4 mb-6 h-[500px] overflow-y-auto scrollbar-hide">
             <div class="flex flex-col space-y-6" style="margin-bottom: 20px;">
@@ -98,12 +94,12 @@
                         <i class="fa fa-info-circle"></i>
                     </div>
                     <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none max-w-[80%]">
-                        <p class="text-gray-800">欢迎使用语音转文本功能！点击下方麦克风按钮开始录音，您的语音将被转换为文字显示在这里。</p>
+                        <p class="text-gray-800">欢迎使用AI语音面试！点击下方麦克风按钮开始个人介绍。</p>
                     </div>
                 </div>
             </div>
         </div>
-
+        
         <!-- 语音输入区域 -->
         <div class="bg-white rounded-lg shadow-sm p-4 flex flex-col space-y-4">
             <div class="flex items-center justify-between">
@@ -129,11 +125,12 @@
             </div>
         </div>
     </main>
+    
 
     <!-- 页脚 -->
     <footer class="bg-white border-t border-gray-200 py-4">
         <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
-            <p>© 2025 语音转文本 | WebSocket连接至 ws://localhost:8080</p>
+            <p>© 2025 AI语音面试 | WebSocket连接至 ws://localhost:8080</p>
         </div>
     </footer>
 
@@ -152,16 +149,48 @@
         const clearBtn = document.getElementById('clear-btn');
         const voiceLevelIndicator = document.getElementById('voice-level-indicator');
         const voiceLevelText = document.getElementById('voice-level-text');
-        
-        // 音频播放器实例
+
+
+        let shouldAutoRestart = false; // 是否应该在音频播放完毕后自动重启录音
+        let isProcessing = false; // 是否正在处理中（等待响应或播放音频）
+
         let audioPlayer = new Audio();
-        let isUserInteracted = false; // 用户交互标记
-        let audioContextForAutoplay; // 音频上下文，用于激活自动播放
+        let isUserInteracted = false; // 用于处理自动播放限制
+
+        function playAudio(url) {
+            if(!isUserInteracted) return;
+            
+            audioPlayer.pause();
+            audioPlayer.src = url;
+            isProcessing = true; // 标记为处理中
+            
+            audioPlayer.play().catch(error => {
+                console.error('音频播放失败:', error);
+                isProcessing = false;
+                checkAutoRestart(); // 检查是否需要自动重启
+            });
+            
+            audioPlayer.onended = () => {
+                isProcessing = false;
+                checkAutoRestart(); // 音频播放结束，检查是否需要自动重启
+            };
+        }
+
+
+        function checkAutoRestart() {
+            // 如果应该自动重启且不处于处理中状态
+            if(shouldAutoRestart && !isProcessing) {
+                isSilent=false;
+                shouldAutoRestart = false;
+                startRealTimeAudio(); // 自动重启录音
+            }
+        }
+
 
         // 初始化WebSocket连接
         function initWebSocket() {
             try {
-                ws = new WebSocket('ws://localhost:8080');
+                ws = new WebSocket('ws://172.22.122.255:8080');
                 
                 ws.onopen = () => {
                     console.log('WebSocket连接已建立');
@@ -179,35 +208,34 @@
                     // 尝试重新连接
                     setTimeout(initWebSocket, 3000);
                 };
-
+                
                 ws.onmessage = (event) => {
                     try {
                         const data = JSON.parse(event.data);
                         console.log('收到消息:', data);
                         
-                        // 处理用户消息（语音转文本结果）
                         if(data.role === "user" && data.content?.result) {
                             const isIncremental = data.content?.is_incremental || false;
                             updateMessage(data.content.result, true, isIncremental);
                         }
-                        
-                        // 处理assistant消息（包含文本和音频URL）
                         else if(data.role === "assistant" && data.content) {
-                            const text = data.content.text || data.content;
-                            const audioUrl = data.content.audio_url;
+                            updateMessage(data.content, false);
                             
-                            // 显示文本并播放音频
-                            updateMessage(text, false);
-                            if (audioUrl) {
-                                playAudio(audioUrl);
+                            if(data.audio_url) {
+                                playAudio(data.audio_url);
+                                shouldAutoRestart = true; // 标记需要自动重启
+                            } else {
+                                // 没有音频时直接重启
+                                shouldAutoRestart = true;
+                                checkAutoRestart();
                             }
                         }
-                        
                     } catch (e) {
                         console.log('收到非JSON消息:', event.data);
                     }
                 };
 
+                
                 ws.onerror = (error) => {
                     console.error('WebSocket错误:', error);
                     updateConnectionStatus(false);
@@ -229,9 +257,11 @@
             }
         }
 
-        // 更新消息显示函数
+        // 在script标签中添加这些变量
+        let currentMessageId = null;
         let currentMessageElement = null;
 
+        // 更新消息显示函数
         function updateMessage(text, isUser = false, isIncremental = false) {
             // 如果是增量更新且当前有活跃消息
             if (isIncremental && currentMessageElement) {
@@ -262,63 +292,34 @@
             }
         }
 
-        // 激活音频上下文（用于自动播放）
-        function activateAudioContext() {
-            if (!audioContextForAutoplay) {
-                audioContextForAutoplay = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioContextForAutoplay.createOscillator();
-                oscillator.frequency.setValueAtTime(200, audioContextForAutoplay.currentTime);
-                oscillator.type = 'sine';
-                oscillator.duration = 0.01;
-                oscillator.start();
-                oscillator.stop(audioContextForAutoplay.currentTime + 0.01);
-            }
-        }
 
-        // 播放音频函数（自动播放）
-        function playAudio(audioUrl) {
-            // 确保用户已进行过交互（点击按钮等）
-            if (!isUserInteracted) {
-                console.log('等待用户交互以启用自动播放...');
-                return;
-            }
+        // 添加消息到对话区
+        function addMessage(text, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start ' + (isUser ? 'justify-end' : '');
             
-            // 停止当前播放
-            audioPlayer.pause();
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = isUser ? 
+                'w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary mr-3 flex-shrink-0' :
+                'w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0';
             
-            // 设置新音频源
-            audioPlayer.src = audioUrl;
+            const icon = isUser ? '<i class="fa fa-user"></i>' : '<i class="fa fa-comment"></i>';
+            avatarDiv.innerHTML = icon;
             
-            // 创建音频播放指示器UI
-            const messageDivs = chatContainer.querySelectorAll('.flex.items-start:not(.justify-end)');
-            const lastMessageDiv = messageDivs[messageDivs.length - 1];
+            const contentDiv = document.createElement('div');
+            contentDiv.className = isUser ? 
+                'bg-secondary/10 text-gray-800 rounded-lg p-3 rounded-tr-none max-w-[80%]' :
+                'bg-gray-100 text-gray-800 rounded-lg p-3 rounded-tl-none max-w-[80%]';
             
-            if (lastMessageDiv) {
-                const contentDiv = lastMessageDiv.querySelector('.bg-gray-100');
-                if (contentDiv) {
-                    // 如果已有音频指示器，先移除
-                    const existingIndicator = contentDiv.querySelector('.audio-play-indicator');
-                    if (existingIndicator) {
-                        existingIndicator.remove();
-                    }
-                    
-                    // 创建新的音频播放指示器
-                    const indicator = document.createElement('span');
-                    indicator.className = 'audio-play-indicator';
-                    indicator.innerHTML = '<i class="fa fa-volume-up text-xs"></i>';
-                    
-                    contentDiv.appendChild(indicator);
-                }
-            }
+            const textP = document.createElement('p');
+            textP.textContent = text;
+            contentDiv.appendChild(textP);
             
-            // 激活音频上下文以允许自动播放
-            activateAudioContext();
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
             
-            // 尝试自动播放
-            audioPlayer.play().catch(error => {
-                console.error('自动播放被浏览器阻止:', error);
-                console.log('请确保已启用自动播放权限，或尝试刷新页面后先进行用户交互');
-            });
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         // 清空对话区
@@ -345,8 +346,9 @@
         let noiseLevel = 0;
         let isCalibrating = false;
         const CALIBRATION_TIME = 1000; // 1秒噪声校准时间
-        const SILENCE_TIMEOUT = 2000; // 2秒无语音自动停止
+        const SILENCE_TIMEOUT = 2000; // 1秒无语音自动停止
         let lastVoiceTime = 0; // 必须初始化
+
 
         // 分析音频数据
         let isSilent = false;
@@ -357,7 +359,6 @@
             const dataArray = new Uint8Array(analyser.frequencyBinCount);
             analyser.getByteFrequencyData(dataArray);
             
-            // 计算当前音量级别
             let sum = 0;
             for (let i = 0; i < dataArray.length; i++) {
                 sum += dataArray[i] * dataArray[i];
@@ -367,27 +368,33 @@
             
             updateVoiceLevel(level);
             
-            // 静音检测
             const currentTime = Date.now();
-            if (level > 0.1) { // 有声音
+            console.log("voice: ", level, "currentTime: ", currentTime, "lastVoiceTime: ", lastVoiceTime, "isSilent: ", isSilent)
+            if (level > 0.3) { // 检测到声音
                 lastVoiceTime = currentTime;
                 
-                // 如果之前是静音状态，现在检测到声音，发送"say"消息
                 if (isSilent && ws && ws.readyState === WebSocket.OPEN) {
+                    const userInfo = document.getElementById('userInfo').value.trim();
+            
                     ws.send(JSON.stringify({
-                        "status": "say"
+                        "status": "say",
+                        "api_key": "bfb7ab5723998050f",
+                        "user_info": userInfo
                     }));
                     isSilent = false;
                     statusText.textContent = '正在录音，请说话...';
                 }
-            } else if (currentTime - lastVoiceTime > SILENCE_TIMEOUT) { // 静音超时
-                // 只发送停止消息，不关闭麦克风
-                if (ws && ws.readyState === WebSocket.OPEN && !isSilent) {
+            } 
+            // 检测到静音超时
+            else if (currentTime - lastVoiceTime > SILENCE_TIMEOUT && !isSilent) {
+                if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({
                         "status": "over"
                     }));
                     isSilent = true;
-                    statusText.textContent = '检测到静音，等待语音...';
+                    isProcessing = true; // 标记为处理中
+                    statusText.textContent = '正在生成问题...';
+                    stopRealTimeAudio(false); // 停止录音但不发送over消息
                 }
             }
             
@@ -399,9 +406,13 @@
             if (!ws || ws.readyState !== WebSocket.OPEN) {
                 return;
             }
-
+          
+    
+            const userInfo = document.getElementById('userInfo').value.trim();
             ws.send(JSON.stringify({
-                "status": "say"
+                "status": "say",
+                "api_key": "907650f",
+                "user_info": userInfo
             }));
             
             try {
@@ -430,78 +441,111 @@
                         if (ws.readyState === WebSocket.OPEN && isRecording) {
                             const pcmData = e.inputBuffer.getChannelData(0);
                             const pcm16 = new Int16Array(pcmData.length);
-                            
-                            // 转换为16位PCM
                             for (let i = 0; i < pcmData.length; i++) {
                                 pcm16[i] = Math.max(-32768, Math.min(32767, pcmData[i] * 32768));
                             }
-                            
-                            // 发送音频数据到服务器
                             ws.send(pcm16.buffer);
                         }
                     };
-
+                    
+                    source.connect(analyser);
                     source.connect(processor);
                     processor.connect(audioContext.destination);
-                    audioStream = stream;
+                    
+                    audioStream = {
+                        audioContext,
+                        stream,
+                        processor,
+                        source
+                    };
                 }
                 
                 isRecording = true;
-                isUserInteracted = true; // 标记用户已交互，允许自动播放
                 lastVoiceTime = Date.now();
-                isSilent = false;
-                
-                recordBtn.classList.replace('bg-primary', 'bg-red-500');
                 recordBtn.innerHTML = '<i class="fa fa-stop text-3xl"></i>';
+                recordBtn.classList.replace('bg-primary', 'bg-red-500');
                 statusText.textContent = '正在录音，请说话...';
                 
-                // 开始分析音频
                 analyzeAudio();
+
+                currentMessageId = Date.now();
+                currentMessageElement = null;
                 
             } catch (error) {
-                console.error('启动录音失败:', error);
-                statusText.textContent = '录音启动失败，请检查麦克风权限';
+                console.error('录音启动失败:', error);
+                statusText.textContent = '无法访问麦克风';
             }
         }
 
         // 停止录音
-        function stopRealTimeAudio() {
-            if (!isRecording) return;
-            
-            isRecording = false;
-            recordBtn.classList.replace('bg-red-500', 'bg-primary');
-            recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
-            statusText.textContent = '录音已停止';
-            
-            // 停止音频分析
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
-            
-            // 发送结束消息
-            if (ws && ws.readyState === WebSocket.OPEN) {
+        function stopRealTimeAudio(sendStopMessage = true) {
+            if (sendStopMessage && ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
                     "status": "over"
                 }));
             }
+            
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            isRecording = false;
+            recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
+            recordBtn.classList.replace('bg-red-500', 'bg-primary');
+            statusText.textContent = isProcessing ? '正在生成问题...' : '已连接到服务器';
+            
+            // 重置音量指示器
+            voiceLevelIndicator.style.width = '0%';
+            voiceLevelText.textContent = '音量: 0';
+
+            currentMessageId = null;
+            currentMessageElement = null;
         }
 
-        // 初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            // 初始化WebSocket
+        window.addEventListener('load', () => {
+            // 检查媒体设备支持
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusText.textContent = '您的浏览器不支持语音功能';
+                recordBtn.disabled = true;
+                recordBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+            
             initWebSocket();
-            
-            // 绑定按钮事件
-            recordBtn.addEventListener('click', () => {
-                if (isRecording) {
-                    stopRealTimeAudio();
-                } else {
-                    startRealTimeAudio();
-                }
-            });
-            
-            clearBtn.addEventListener('click', clearChat);
         });
+
+        // 事件监听器
+        recordBtn.addEventListener('click', (e) => {
+            isUserInteracted = true;
+            e.preventDefault();
+            
+            // 如果正在处理中，不允许操作
+            if(isProcessing) {
+                return;
+            }
+            
+            if (isRecording) {
+                stopRealTimeAudio();
+            } else {
+                startRealTimeAudio();
+            }
+        });
+
+        clearBtn.addEventListener('click', clearChat);
+
+        // 页面卸载时清理资源
+        window.addEventListener('beforeunload', () => {
+            if (isRecording) {
+                stopRealTimeAudio();
+            }
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        });
+
+        // 页面加载时初始化WebSocket
+        window.addEventListener('load', initWebSocket);
     </script>
 </body>
 </html>

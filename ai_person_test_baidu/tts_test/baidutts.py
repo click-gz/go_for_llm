@@ -1,6 +1,6 @@
 import requests
 import json
-from playsound import playsound
+# from playsound import playsound
 import time
 
 class BaiduTTS:
@@ -9,15 +9,9 @@ class BaiduTTS:
     封装了语音合成创建和查询功能
     """
     
-    def __init__(self, api_key, secret_key):
-        """
-        初始化百度TTS客户端
-        
-        :param api_key: 百度API Key
-        :param secret_key: 百度Secret Key
-        """
-        self.API_KEY = api_key
-        self.SECRET_KEY = secret_key
+    def __init__(self, ):
+        self.API_KEY = ""
+        self.SECRET_KEY = ""
     
     def get_access_token(self):
         """
@@ -51,7 +45,7 @@ class BaiduTTS:
         :param paragraph_break: 段落间隔(毫秒)，默认5000
         :return: API响应结果
         """
-        url = "https://aip.baidubce.com/rpc/2.0/tts/v1/create?access_token=" + self.get_access_token()
+        url = "https://aip.baidubce.com/rpc/2.0/tts/v1/create"
         
         payload = json.dumps({
             "text": text,
@@ -67,8 +61,10 @@ class BaiduTTS:
         
         headers = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Authorization': 'Bearer bfb7ab5723998050f'
         }
+    
         
         response = requests.request("POST", url, headers=headers, data=payload)
         print(response.json())
@@ -78,7 +74,7 @@ class BaiduTTS:
         """
         查询语音合成任务状态
         """
-        url = "https://aip.baidubce.com/rpc/2.0/tts/v1/query?access_token=" + self.get_access_token()
+        url = "https://aip.baidubce.com/rpc/2.0/tts/v1/query"
         
         payload = json.dumps({
             "task_ids": [self.task_id]
@@ -86,11 +82,13 @@ class BaiduTTS:
         
         headers = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json'
+            'Accept': 'application/json',
+            'Authorization': 'Bearer 5723998050f'
         }
         
         response = requests.request("POST", url, headers=headers, data=payload)
-        while(response.json().get("tasks_info")[0].get("task_result") == "Running"):
+        print(response.json())
+        while(response.json().get("tasks_info")[0].get("task_status") == "Running"):
             response = requests.request("POST", url, headers=headers, data=payload)
             print(response.json())
             time.sleep(1)
@@ -109,7 +107,7 @@ class BaiduTTS:
 # 使用示例
 if __name__ == '__main__':
     # 初始化客户端
-   
+    tts_client = BaiduTTS()
     # 创建语音合成任务
     tts_client.create_tts_task(text="欢迎使用百度语音技术")
     import time
