@@ -62,7 +62,7 @@ class BaiduTTS:
         headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer bce-v3/ALTAK-jbx93vI0G3vWf6w0GD5Fu/cd5fb861f893943ac90762fbfb7ab5723998050f'
+            'Authorization': 'Bearer fb861f893943ac90762fbfb7ab5723998050f'
         }
     
         
@@ -83,7 +83,7 @@ class BaiduTTS:
         headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization': 'Bearer bce-v3/ALTAK-jbx93vI0G3vWf6w0GD5Fu/cd5fb861f893943ac90762fbfb7ab5723998050f'
+            'Authorization': 'Bearer 861f893943ac90762fbfb7ab5723998050f'
         }
         
         response = requests.request("POST", url, headers=headers, data=payload)

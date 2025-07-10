@@ -35,7 +35,7 @@ class mianshi_chat:
         url = "https://qianfan.baidubce.com/v2/chat/completions"
         headers = {
             "Content-Type": "application/json",
-            "Authorization": "Bearer bce-v3/ALTAK-jbx93vI0G3vWf6w0GD5Fu/cd5fb861f893943ac90762fbfb7ab5723998050f"
+            "Authorization": "Bearer f893943ac90762fbfb7ab5723998050f"
         }
     
         data = {
