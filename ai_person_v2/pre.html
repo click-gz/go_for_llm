@@ -135,6 +135,9 @@
     </footer>
 
     <script>
+        // 配置后端API地址 - 可在部署时修改
+        const API_BASE_URL = 'http://localhost:5000';
+        
         // 改进的状态管理
         let chatState = {
             currentStream: {
@@ -160,6 +163,10 @@
         let dataArray = null;
         let animationFrameId = null;
         let ws = null;
+        let audioPlayer = null;
+        let isAudioPlaying = false;
+        let userHasInteracted = false; // 新增：用户是否已交互标志
+
         
         // DOM 元素
         const recordBtn = document.getElementById('recordBtn');
@@ -185,6 +192,8 @@
             recognition.continuous = true;  // 连续识别
             recognition.interimResults = true;  // 返回中间结果
             recognition.lang = window.navigator.language; 
+            recognition.maxSilence = 3000; // 设置静音超时为3秒(单位毫秒)
+            recognition.interimResultsTimeout = 2000; // 设置非最终结果超时为2秒
             console.log('语音识别已初始化 ', window.navigator.language);
             
             // 设置回调函数
@@ -194,31 +203,62 @@
             };
             
             recognition.onresult = (event) => {
-                const transcript = [];
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    transcript.push(event.results[i][0].transcript);
-                    console.log("识别结果:", event.results[i][0].transcript)
-                    // 如果是最终结果
+                let interimTranscript = '';
+                let finalTranscript = '';
+                
+                // 确保当前有活动的用户消息流
+                if (!chatState.currentStream.active || !chatState.currentStream.isUser) {
+                    chatState.currentStream = {
+                        active: true,
+                        content: '',
+                        element: addMessage('', true),  // 创建新的用户消息
+                        messageId: generateMessageId(),
+                        isUser: true
+                    };
+                }
+
+                // 处理所有结果
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
                     if (event.results[i].isFinal) {
-                        const finalTranscript = event.results[i][0].transcript;
-                        addMessage(finalTranscript, true);
-                        // 通过WebSocket发送到后端
-                        if (ws && ws.readyState === WebSocket.OPEN) {
-                            console.log('发送识别请求:', finalTranscript);
-                            ws.send(JSON.stringify({
-                                type: 'chat',
-                                text: finalTranscript,
-                                api_key: "bce-v3/ALTAK-jbx93vI0G3vWf6w0GD5Fu/cd5fb861f893943ac90762fbfb7ab5723998050f",
-                                user_info: document.getElementById('userInfo').value.trim()
-                            }));
-                            
-                            // 添加等待消息
-                            addMessage('', false, true);
-                            statusText.textContent = '正在发送请求...';
-                        } else {
-                            showError('WebSocket连接未建立');
-                        }
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
                     }
+                }
+
+                // 更新当前流式消息内容
+                if (interimTranscript) {
+                    chatState.currentStream.content = interimTranscript;
+                    updateStreamingMessage(chatState.currentStream.element, interimTranscript);
+                }
+
+                // 如果是最终结果
+                if (finalTranscript) {
+                    // 更新为最终结果
+                    chatState.currentStream.content = finalTranscript;
+                    updateStreamingMessage(chatState.currentStream.element, finalTranscript);
+                    
+                    // 通过WebSocket发送到后端
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        console.log('发送识别请求:', finalTranscript);
+                        ws.send(JSON.stringify({
+                            type: 'chat',
+                            text: finalTranscript,
+                            api_key: "bce-v3/ALTAK-jbx93vI0G3vWf6w0GD5Fu/cd5fb861f893943ac90762fbfb7ab5723998050f",
+                            user_info: document.getElementById('userInfo').value.trim()
+                        }));
+                        
+                        // 添加等待消息
+                        addMessage('', false, true);
+                        statusText.textContent = '正在发送请求...';
+                    } else {
+                        showError('WebSocket连接未建立');
+                    }
+                    
+                    // 完成当前流
+                    finishStreamingMessage(chatState.currentStream.element);
                 }
             };
             
@@ -240,6 +280,11 @@
 
         // 语音识别
         function recognizeSpeech() {
+            if (isAudioPlaying) {
+                statusText.textContent = '请等待回复播放完毕...';
+                return;
+            }
+            
             if (!recognition) {
                 if (!initRecognition()) return;
             }
@@ -251,6 +296,7 @@
             
             recognition.start();
         }
+
 
         // 停止识别
         function stopRecognition() {
@@ -298,19 +344,21 @@
             messageDiv.appendChild(avatarDiv);
             messageDiv.appendChild(contentDiv);
             
+            
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
-            
+
             // 更新消息状态
             const messageData = {
                 id: messageId,
                 text: text,
                 isUser: isUser,
-                isStreaming: isStreaming,
+                isStreaming: isStreaming || isUser,  // 用户消息默认作为流式处理
                 timestamp: new Date().getTime()
             };
             
             chatState.messages.push(messageData);
+
             
             if (isStreaming) {
                 chatState.currentStream = {
@@ -325,13 +373,13 @@
         }
         
         // 更新流式消息
-        function updateStreamingMessage(contentDiv, text) {
-            if (!contentDiv || !contentDiv.getAttribute('data-streaming')) return;
+        function updateStreamingMessage(contentDiv, text, isUser = false) {
+            if (!contentDiv) return;
             
-            // 移除加载指示器
-            const indicator = contentDiv.querySelector('.streaming-indicator');
-            if (indicator) {
-                contentDiv.removeChild(indicator);
+            // 如果是用户消息且没有标记为流式
+            if (isUser && !contentDiv.getAttribute('data-streaming')) {
+                contentDiv.setAttribute('data-streaming', 'true');
+                contentDiv.classList.add('streaming-message');
             }
             
             // 创建或更新内容段落
@@ -356,10 +404,6 @@
         function finishStreamingMessage(contentDiv) {
             if (!contentDiv || !contentDiv.getAttribute('data-streaming')) return;
             
-            contentDiv.removeAttribute('data-streaming');
-            contentDiv.classList.remove('streaming-message');
-            
-            // 更新消息状态
             const messageId = contentDiv.getAttribute('data-message-id');
             const messageIndex = chatState.messages.findIndex(m => m.id === messageId);
             if (messageIndex !== -1) {
@@ -384,7 +428,7 @@
                 chatState.currentStream = {
                     active: true,
                     content: text,
-                    element: addMessage('', false, true),
+                    element: addMessage('', false),
                     messageId: generateMessageId()
                 };
             } else {
@@ -413,9 +457,20 @@
         }
         
         // 处理完整响应
-        function handleFullResponse(text) {
+        function handleFullResponse(data) {
+            console.log('handleFullResponse: 接收到完整响应，文本内容:', data.text);
+            console.log(document.querySelectorAll('.streaming-message'));
+            document.querySelectorAll('.streaming-message').forEach(el => {
+                if (el.querySelector('.streaming-indicator')) {
+                    const messageDiv = el.closest('[data-message="true"]');
+                    if (messageDiv) {
+                        messageDiv.remove();
+                    }
+                }
+            });
+
+            let text = data.text;
             if (chatState.currentStream.active && chatState.currentStream.element) {
-                // 只在有流式消息时覆盖，否则新建
                 updateStreamingMessage(chatState.currentStream.element, text);
                 finishStreamingMessage(chatState.currentStream.element);
             } else {
@@ -429,7 +484,98 @@
                 messageId: null
             };
 
-            statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            // 播放音频（修改为自动播放）
+            // 新增二进制音频处理
+            if (data.audio_data) {
+                const binaryString = atob(data.audio_data);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], {type: data.mime_type || 'audio/mpeg'});
+                const audioUrl = URL.createObjectURL(blob);
+                playAudio(audioUrl);
+            } 
+            else if (data.audio_url) {
+                playAudio(data.audio_url);
+            } else {
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            }
+        }
+
+        // 自动播放音频（修改的核心函数）
+        async function playAudio(url) {
+            if (audioPlayer) {
+                audioPlayer.pause();
+                audioPlayer = null;
+            }
+            
+            statusText.textContent = '正在准备播放回复...';
+            isAudioPlaying = true;
+            
+            audioPlayer = new Audio(url);
+            
+            try {
+                // 尝试自动播放
+                await audioPlayer.play();
+                console.log('音频开始播放');
+                statusText.textContent = '正在播放回复...';
+            } catch (error) {
+                console.error('自动播放失败:', error);
+                
+                if (userHasInteracted) {
+                    // 用户已交互但仍失败，显示手动播放按钮
+                    showPlayPrompt(audioPlayer);
+                } else {
+                    // 用户未交互，提示先点击录音按钮
+                    statusText.textContent = '请先点击录音按钮激活音频播放权限';
+                    isAudioPlaying = false;
+                }
+            }
+            
+            audioPlayer.onended = () => {
+                console.log('音频播放结束');
+                isAudioPlaying = false;
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            };
+            
+            audioPlayer.onerror = () => {
+                console.error('音频播放错误:', audioPlayer.error);
+                isAudioPlaying = false;
+                statusText.textContent = '播放失败，请刷新页面重试';
+                showError('音频播放失败，请检查音频格式或网络连接');
+            };
+        }
+        
+        // 显示手动播放提示（新增函数）
+        function showPlayPrompt(audioPlayer) {
+            // 创建提示弹窗
+            const promptElement = document.createElement('div');
+            promptElement.className = 'fixed inset-0 flex items-center justify-center bg-black/50 z-50';
+            promptElement.innerHTML = `
+                <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">需要播放授权</h3>
+                    <p class="text-gray-600 mb-6">由于浏览器限制，需要您点击下方按钮播放语音回复</p>
+                    <button id="playManuallyBtn" class="w-full bg-primary text-white py-3 px-4 rounded-lg hover:bg-primary/90 transition-colors">
+                        <i class="fa fa-play mr-2"></i> 播放语音
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(promptElement);
+            
+            // 手动播放按钮事件
+            document.getElementById('playManuallyBtn').addEventListener('click', async () => {
+                try {
+                    await audioPlayer.play();
+                    document.body.removeChild(promptElement);
+                    statusText.textContent = '正在播放回复...';
+                } catch (error) {
+                    console.error('手动播放失败:', error);
+                    statusText.textContent = '播放失败，请刷新页面重试';
+                    document.body.removeChild(promptElement);
+                    showError('即使手动点击后，音频仍无法播放，请检查浏览器设置');
+                }
+            });
         }
         
         // 显示错误消息
@@ -469,18 +615,13 @@
                 // 接收到消息
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    console.log("get_response: ", data);
                     
                     if (data.type === 'system') {
                         console.log('系统消息:', data.text);
                     }
-                    else if (data.type === 'stream') {
-                        handleStreamMessage(data.text);
-                    }
-                    else if (data.type === 'stream_end') {
-                        handleStreamEnd();
-                    }
                     else if (data.type === 'response') {
-                        handleFullResponse(data.text);
+                        handleFullResponse(data);
                     }
                     else if(data.role === "user" && data.content?.result) {
                         const isIncremental = data.content?.is_incremental || false;
@@ -544,9 +685,36 @@
             };
         }
 
-        // 事件监听器
-        recordBtn.addEventListener('click', (e) => {
+        // 事件监听器（修改的核心部分）
+        recordBtn.addEventListener('click', async (e) => {
             e.preventDefault();
+            
+            // 首次点击时初始化音频上下文，获取播放权限
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    userHasInteracted = true;  // 标记用户已交互
+                    console.log("音频上下文已初始化，用户已获得播放权限");
+                    
+                    // 创建无声音频源，触发浏览器授权
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz
+                    gainNode.gain.setValueAtTime(0, audioContext.currentTime); // 静音
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    oscillator.start();
+                    oscillator.stop(audioContext.currentTime + 0.1);
+                    
+                } catch (err) {
+                    console.error("初始化音频上下文失败:", err);
+                    showError("初始化音频播放失败，请确保您的浏览器允许音频播放");
+                }
+            }
             
             if (isRecording) {
                 stopRecognition();
