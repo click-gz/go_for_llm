@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI语音面试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#165DFF',
+                        secondary: '#0FC6C2',
+                        neutral: '#F5F7FA',
+                        dark: '#1D2129',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .btn-shadow {
+                box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+            }
+            .btn-shadow-red {
+                box-shadow: 0 4px 14px 0 rgba(239, 68, 68, 0.4);
+            }
+            .pulse-animation {
+                animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            @keyframes pulse {
+                0%, 100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.5;
+                }
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+
+            .message-item {
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body class="font-inter bg-gray-50 min-h-screen flex flex-col">
+    <!-- 顶部导航 -->
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-microphone text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-dark">AI语音面试</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-6">
+        <!-- 状态显示区 -->
+        <div class="mb-6 bg-white rounded-lg shadow-sm p-4 flex items-center">
+            <div id="statusDot" class="w-3 h-3 rounded-full bg-gray-300 mr-3"></div>
+            <p id="statusText" class="text-gray-600">准备就绪，请点击下方按钮开始录音</p>
+        </div>
+        <div class="mb-6 bg-white rounded-lg shadow-sm p-4">
+            <h2 class="text-lg font-semibold text-dark mb-3">个人信息</h2>
+            <textarea 
+                id="userInfo" 
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent" 
+                rows="3" 
+                placeholder="请输入您的个人信息（如姓名、职位、联系方式等）"
+            ></textarea>
+        </div>
+        <!-- 文本显示区 -->
+        <div id="chat-container" class="bg-white rounded-lg shadow-sm p-4 mb-6 h-[500px] overflow-y-auto scrollbar-hide">
+            <div class="flex flex-col space-y-6" style="margin-bottom: 20px;">
+                <div class="flex items-start">
+                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0">
+                        <i class="fa fa-info-circle"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none max-w-[80%]">
+                        <p class="text-gray-800">欢迎使用AI语音面试！点击下方麦克风按钮开始个人介绍。</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 语音输入区域 -->
+        <div class="bg-white rounded-lg shadow-sm p-4 flex flex-col space-y-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div id="voice-level" class="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div id="voice-level-indicator" class="h-full bg-primary w-0 transition-all duration-150"></div>
+                    </div>
+                    <span id="voice-level-text" class="text-sm text-gray-500">音量: 0</span>
+                </div>
+                <button id="clear-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fa fa-trash-o mr-1"></i> 清空文本
+                </button>
+            </div>
+            
+            <div class="flex justify-center">
+                <button id="recordBtn" class="w-20 h-20 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:bg-primary/90 active:scale-95 transition-all">
+                    <i class="fa fa-microphone text-3xl"></i>
+                </button>
+            </div>
+            
+            <div class="text-center text-sm text-gray-500">
+                <p>说话时请保持适中语速和音量</p>
+            </div>
+        </div>
+    </main>
+    
+
+    <!-- 页脚 -->
+    <footer class="bg-white border-t border-gray-200 py-4">
+        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+            <p>© 2025 AI语音面试 | WebSocket连接至 ws://localhost:8080</p>
+        </div>
+    </footer>
+
+    <script>
+        // 改进的状态管理
+        let chatState = {
+            currentStream: {
+                active: false,
+                content: '',
+                element: null,
+                messageId: null
+            },
+            messages: []
+        };
+        
+        // 消息ID生成器
+        let messageIdCounter = 0;
+        function generateMessageId() {
+            return `msg-${Date.now()}-${++messageIdCounter}`;
+        }
+        
+        // 全局变量
+        let isRecording = false;
+        let audioContext = null;
+        let mediaStream = null;
+        let analyser = null;
+        let dataArray = null;
+        let animationFrameId = null;
+        let ws = null;
+        let audioPlayer = null;
+        let isAudioPlaying = false;
+
+        
+        // DOM 元素
+        const recordBtn = document.getElementById('recordBtn');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const voiceLevelIndicator = document.getElementById('voice-level-indicator');
+        const voiceLevelText = document.getElementById('voice-level-text');
+        const chatContainer = document.getElementById('chat-container');
+        const clearBtn = document.getElementById('clear-btn');
+
+        let recognition;
+        function initRecognition() {
+            // 检查浏览器支持
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                alert('抱歉，您的浏览器不支持语音识别功能。请使用Chrome、Edge等现代浏览器。');
+                return false;
+            }
+            
+            // 创建识别对象
+            recognition = new window.webkitSpeechRecognition();
+            
+            // 配置识别参数
+            recognition.continuous = true;  // 连续识别
+            recognition.interimResults = true;  // 返回中间结果
+            recognition.lang = window.navigator.language; 
+            console.log('语音识别已初始化 ', window.navigator.language);
+            
+            // 设置回调函数
+            recognition.onstart = () => {
+                isRecording = true;
+                console.log('语音识别已开始。。。');
+            };
+            
+            recognition.onresult = (event) => {
+                let interimTranscript = '';
+                let finalTranscript = '';
+                
+                // 确保当前有活动的用户消息流
+                if (!chatState.currentStream.active || !chatState.currentStream.isUser) {
+                    chatState.currentStream = {
+                        active: true,
+                        content: '',
+                        element: addMessage('', true),  // 创建新的用户消息
+                        messageId: generateMessageId(),
+                        isUser: true
+                    };
+                }
+
+                // 处理所有结果
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    const transcript = event.results[i][0].transcript;
+                    
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript;
+                    } else {
+                        interimTranscript += transcript;
+                    }
+                }
+
+                // 更新当前流式消息内容
+                if (interimTranscript) {
+                    chatState.currentStream.content = interimTranscript;
+                    updateStreamingMessage(chatState.currentStream.element, interimTranscript);
+                }
+
+                // 如果是最终结果
+                if (finalTranscript) {
+                    // 更新为最终结果
+                    chatState.currentStream.content = finalTranscript;
+                    updateStreamingMessage(chatState.currentStream.element, finalTranscript);
+                    
+                    // 通过WebSocket发送到后端
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        console.log('发送识别请求:', finalTranscript);
+                        ws.send(JSON.stringify({
+                            type: 'chat',
+                            text: finalTranscript,
+                            api_key: "861f893943ac90762fbfb7ab5723998050f",
+                            user_info: document.getElementById('userInfo').value.trim()
+                        }));
+                        
+                        // 添加等待消息
+                        addMessage('', false, true);
+                        statusText.textContent = '正在发送请求...';
+                    } else {
+                        showError('WebSocket连接未建立');
+                    }
+                    
+                    // 完成当前流
+                    finishStreamingMessage(chatState.currentStream.element);
+                }
+            };
+            
+            recognition.onerror = (event) => {
+                console.error('语音识别错误:', event.error);
+                statusDot.classList.replace('bg-green-500', 'bg-red-500');
+                statusText.textContent = `错误: ${event.error}`;
+            };
+            
+            recognition.onend = () => {
+                isRecording = false;
+                recordBtn.innerHTML = '<i class="fa fa-microphone text-3xl"></i>';
+                recordBtn.classList.replace('bg-red-500', 'bg-primary');
+                statusText.textContent = '准备就绪';
+            };
+            
+            return true;
+        }
+
+        // 语音识别
+        function recognizeSpeech() {
+            if (isAudioPlaying) {
+                statusText.textContent = '请等待回复播放完毕...';
+                return;
+            }
+            
+            if (!recognition) {
+                if (!initRecognition()) return;
+            }
+            isRecording = true;
+            recordBtn.innerHTML = '<i class="fa fa-stop text-3xl"></i>';
+            recordBtn.classList.replace('bg-primary', 'bg-red-500');
+            statusDot.classList.replace('bg-gray-300', 'bg-green-500');
+            statusText.textContent = '正在录音，请说话...';
+            
+            recognition.start();
+        }
+
+
+        // 停止识别
+        function stopRecognition() {
+            if (recognition) {
+                recognition.stop();
+            }
+        }
+
+        // 添加消息到对话
+        function addMessage(text, isUser = false, isStreaming = false) {
+            const messageId = generateMessageId();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex items-start mb-4 ' + (isUser ? 'justify-end' : '');
+            messageDiv.setAttribute('data-message', 'true');
+            messageDiv.setAttribute('data-id', messageId);
+            
+            const avatarDiv = document.createElement('div');
+            avatarDiv.className = isUser ? 
+                'w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary mr-3 flex-shrink-0' :
+                'w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0';
+            
+            const icon = isUser ? 
+                '<i class="fa fa-user"></i>' : 
+                '<i class="fa fa-comment"></i>';
+            
+            avatarDiv.innerHTML = icon;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = isUser ? 
+                'bg-secondary/10 text-gray-800 rounded-lg p-3 rounded-tr-none max-w-[80%]' :
+                'bg-gray-100 text-gray-800 rounded-lg p-3 rounded-tl-none max-w-[80%]';
+            
+            contentDiv.setAttribute('data-message-id', messageId);
+            
+            if (isStreaming) {
+                contentDiv.classList.add('streaming-message');
+                console.log("classList:", [...contentDiv.classList]);  // 转换为数组查看
+                contentDiv.innerHTML = `<p class="streaming-indicator"><i class="fa fa-circle-o-notch fa-spin mr-2"></i>正在思考...</p>`;
+                contentDiv.setAttribute('data-streaming', 'true');
+            } else {
+                const textP = document.createElement('p');
+                textP.textContent = text;
+                contentDiv.appendChild(textP);
+            }
+            
+            messageDiv.appendChild(avatarDiv);
+            messageDiv.appendChild(contentDiv);
+            
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            const elements = document.querySelectorAll('.streaming-message');
+            console.log("new: ", [...contentDiv.classList], isStreaming, elements);
+            
+            
+            // 更新消息状态
+            const messageData = {
+                id: messageId,
+                text: text,
+                isUser: isUser,
+                isStreaming: isStreaming || isUser,  // 用户消息默认作为流式处理
+                timestamp: new Date().getTime()
+            };
+            
+            chatState.messages.push(messageData);
+
+            
+            if (isStreaming) {
+                chatState.currentStream = {
+                    active: true,
+                    content: '',
+                    element: contentDiv,
+                    messageId: messageId
+                };
+            }
+            
+            return contentDiv;
+        }
+        
+        // 更新流式消息
+        function updateStreamingMessage(contentDiv, text, isUser = false) {
+            if (!contentDiv) return;
+            
+            // 如果是用户消息且没有标记为流式
+            if (isUser && !contentDiv.getAttribute('data-streaming')) {
+                contentDiv.setAttribute('data-streaming', 'true');
+                contentDiv.classList.add('streaming-message');
+            }
+            
+            // 移除加载指示器（如果有）
+           
+            
+            // 创建或更新内容段落
+            let textP = contentDiv.querySelector('p');
+            if (!textP) {
+                textP = document.createElement('p');
+                contentDiv.appendChild(textP);
+            }
+            
+            textP.textContent = text;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            // 更新消息状态
+            const messageId = contentDiv.getAttribute('data-message-id');
+            const messageIndex = chatState.messages.findIndex(m => m.id === messageId);
+            if (messageIndex !== -1) {
+                chatState.messages[messageIndex].text = text;
+            }
+        }
+        
+        // 完成流式消息
+        function finishStreamingMessage(contentDiv) {
+            if (!contentDiv || !contentDiv.getAttribute('data-streaming')) return;
+            
+            const messageId = contentDiv.getAttribute('data-message-id');
+            const messageIndex = chatState.messages.findIndex(m => m.id === messageId);
+            if (messageIndex !== -1) {
+                chatState.messages[messageIndex].isStreaming = false;
+            }
+            
+            // 重置当前流状态
+            if (chatState.currentStream.messageId === messageId) {
+                chatState.currentStream = {
+                    active: false,
+                    content: '',
+                    element: null,
+                    messageId: null
+                };
+            }
+        }
+        
+        // 处理流式消息的函数
+        function handleStreamMessage(text) {
+            
+
+            // 如果没有流式消息，先新建
+            if (!chatState.currentStream.active) {
+                chatState.currentStream = {
+                    active: true,
+                    content: text,
+                    element: addMessage('', false),
+                    messageId: generateMessageId()
+                };
+            } else {
+                chatState.currentStream.content = text;
+            }
+
+            if (chatState.currentStream.element) {
+                updateStreamingMessage(chatState.currentStream.element, chatState.currentStream.content);
+            }
+
+            statusText.textContent = '正在接收回复...';
+        }
+        
+        // 处理流式消息结束
+        function handleStreamEnd() {
+            if (chatState.currentStream.active && chatState.currentStream.element) {
+                finishStreamingMessage(chatState.currentStream.element);
+                
+                chatState.currentStream = {
+                    active: false,
+                    content: '',
+                    element: null
+                };
+                statusText.textContent = '回复已完成';
+            }
+        }
+        
+        // 处理完整响应
+        function handleFullResponse(data) {
+            console.log('handleFullResponse: 接收到完整响应，文本内容:', data.text);
+            console.log(document.querySelectorAll('.streaming-message'));
+            document.querySelectorAll('.streaming-message').forEach(el => {
+                if (el.querySelector('.streaming-indicator')) {
+                    const messageDiv = el.closest('[data-message="true"]');
+                    if (messageDiv) {
+                        messageDiv.remove();
+                    }
+                }
+            });
+
+            let text = data.text;
+            if (chatState.currentStream.active && chatState.currentStream.element) {
+                updateStreamingMessage(chatState.currentStream.element, text);
+                finishStreamingMessage(chatState.currentStream.element);
+            } else {
+                addMessage(text, false);
+            }
+
+            chatState.currentStream = {
+                active: false,
+                content: '',
+                element: null,
+                messageId: null
+            };
+
+            // 播放音频
+            if (data.audio_url) {
+                playAudio(data.audio_url);
+            } else {
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            }
+        }
+
+        function playAudio(url) {
+            if (audioPlayer) {
+                audioPlayer.pause();
+                audioPlayer = null;
+            }
+            
+            statusText.textContent = '正在播放回复...';
+            isAudioPlaying = true;
+            
+            audioPlayer = new Audio(url);
+            audioPlayer.play().then(() => {
+                console.log('音频开始播放');
+            }).catch(error => {
+                console.error('音频播放失败:', error);
+                isAudioPlaying = false;
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            });
+            
+            audioPlayer.onended = () => {
+                console.log('音频播放结束');
+                isAudioPlaying = false;
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            };
+            
+            audioPlayer.onerror = () => {
+                console.error('音频播放错误');
+                isAudioPlaying = false;
+                statusText.textContent = '准备就绪，请点击下方按钮开始录音';
+            };
+        }
+        
+        // 显示错误消息
+        function showError(message) {
+            addMessage(`错误: ${message}`, false);
+            statusDot.classList.replace('bg-green-500', 'bg-red-500');
+            statusText.textContent = '发生错误，请重试';
+        }
+        
+        // 更新语音音量指示器
+        function updateVoiceLevel(level) {
+            const percentage = Math.min(100, Math.max(0, level * 100));
+            voiceLevelIndicator.style.width = `${percentage}%`;
+            voiceLevelText.textContent = `音量: ${Math.round(percentage)}`;
+        }
+        
+        // 连接WebSocket
+        function connectWebSocket() {
+            const wsUrl = 'ws://172.22.122.255:8080';
+            
+            try {
+                // 关闭现有连接
+                if (ws && ws.readyState !== WebSocket.CLOSED) {
+                    ws.close();
+                }
+                
+                // 创建新连接
+                ws = new WebSocket(wsUrl);
+                
+                // 连接成功
+                ws.onopen = () => {
+                    statusDot.classList.replace('bg-gray-300', 'bg-green-500');
+                    statusText.textContent = 'WebSocket连接已建立，准备就绪';
+                    console.log('WebSocket连接成功:', wsUrl);
+                };
+                
+                // 接收到消息
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    console.log("get_response: ", data);
+                    
+                    if (data.type === 'system') {
+                        console.log('系统消息:', data.text);
+                    }
+                    else if (data.type === 'response') {
+                        handleFullResponse(data);
+                    }
+                    else if(data.role === "user" && data.content?.result) {
+                        const isIncremental = data.content?.is_incremental || false;
+                        updateMessage(data.content.result, true, isIncremental);
+                    }
+                    else if(data.role === "assistant" && data.content) {
+                        updateMessage(data.content, false);
+                    }
+                };
+                
+                // 连接关闭
+                ws.onclose = (event) => {
+                    statusDot.classList.replace('bg-green-500', 'bg-gray-300');
+                    statusText.textContent = 'WebSocket连接已关闭';
+                    console.log('WebSocket连接关闭，代码:', event.code, '原因:', event.reason);
+                    
+                    // 5秒后尝试重新连接
+                    setTimeout(() => {
+                        if (!isRecording) {
+                            connectWebSocket();
+                        }
+                    }, 5000);
+                };
+                
+                // 连接错误
+                ws.onerror = (error) => {
+                    statusDot.classList.replace('bg-green-500', 'bg-red-500');
+                    statusText.textContent = 'WebSocket连接错误';
+                    console.error('WebSocket错误:', error);
+                    showError(`WebSocket连接错误`);
+                };
+                
+            } catch (error) {
+                showError(`WebSocket连接失败: ${error.message}`);
+                console.error('WebSocket连接失败:', error);
+            }
+        }
+        
+        // 清空对话
+        function clearChat() {
+            chatContainer.innerHTML = `
+                <div class="flex items-start">
+                    <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary mr-3 flex-shrink-0">
+                        <i class="fa fa-info-circle"></i>
+                    </div>
+                    <div class="bg-gray-100 rounded-lg p-3 rounded-tl-none max-w-[80%]">
+                        <p class="text-gray-800">欢迎使用AI语音面试！点击下方麦克风按钮开始个人介绍。</p>
+                    </div>
+                </div>
+            `;
+            
+            // 重置消息状态
+            chatState = {
+                currentStream: {
+                    active: false,
+                    content: '',
+                    element: null,
+                    messageId: null
+                },
+                messages: []
+            };
+        }
+
+        // 事件监听器
+        recordBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            if (isRecording) {
+                stopRecognition();
+            } else {
+                recognizeSpeech();
+            }
+        });
+
+        clearBtn.addEventListener('click', clearChat);
+
+        // 页面加载时初始化WebSocket
+        window.addEventListener('load', connectWebSocket);
+    </script>
+</body>
+</html>
