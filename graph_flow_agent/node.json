@@ -1,0 +1,72 @@
+{
+    "nodes": [
+        {
+            "name": "generate_outline",
+            "tool": "outline_generator",
+            "desc": "生成关于LangGraph的文章大纲",
+            "input_map": {
+                "input_text": {
+                    "from": "user_input",
+                    "index": 0,
+                    "transform": None
+                }
+            },
+            "output_field": "outline"
+        },
+        {
+            "name": "split_outline",
+            "tool": "outline_splitter",
+            "desc": "解析大纲并拆分为二级大纲",
+            "input_map": {
+                "input_text": {
+                    "from": "outline",
+                    "index": 0,
+                    "transform": None
+                }
+            },
+            "output_field": "split_outline"
+        },
+        {
+            "name": "generate_content",
+            "tool": "content_generator",
+            "desc": "根据二级大纲生成详细内容",
+            "input_map": {
+                "input_text": {
+                    "from": "split_outline",
+                    "index": None,
+                    "transform": None
+                }
+            },
+            "output_field": "content"
+        },
+        {
+            "name": "generate_chart",
+            "tool": "chart_generator",
+            "desc": "生成相关表格信息",
+            "input_map": {
+                "input_text": {
+                    "from": "content",
+                    "index": 0,
+                    "transform": None
+                }
+            },
+            "output_field": "chart"
+        }
+    ],
+    "edges": [
+        {
+            "from": "generate_outline",
+            "to": "split_outline"
+        },
+        {
+            "from": "split_outline",
+            "to": "generate_content"
+        },
+        {
+            "from": "generate_content",
+            "to": "generate_chart"
+        }
+    ],
+    "entry": "generate_outline",
+    "finish": "generate_chart"
+}
